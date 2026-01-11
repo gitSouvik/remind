@@ -1,6 +1,20 @@
-FROM python:3.7
-RUN mkdir /app
+FROM python:3.11-slim
+
 WORKDIR /app
+
+# system deps (optional but safe)
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# install deps at build time
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# copy source
 COPY . .
-RUN pip install -r requirements.txt
-CMD ["/app/run.sh"]
+
+# make script executable
+RUN chmod +x run.sh
+
+CMD ["./run.sh"]

@@ -34,11 +34,11 @@ class Logging(commands.Cog, logging.Handler):
             record = await self.queue.get()
             channel = self.bot.get_channel(self.channel_id)
             if channel is None:
-                # Channel no longer exists.
                 root_logger.removeHandler(self)
                 self.logger.warning(
-                    'Logging channel not available,'
-                    'disabling Discord log handler.')
+                    'Logging channel not available, '
+                    'disabling Discord log handler.'
+                )
                 break
             try:
                 msg = self.format(record)
@@ -46,7 +46,7 @@ class Logging(commands.Cog, logging.Handler):
             except BaseException:
                 self.handleError(record)
 
-    # logging.Handler overrides below.
+    # logging.Handler overrides
 
     def emit(self, record):
         self.queue.put_nowait(record)
@@ -56,13 +56,16 @@ class Logging(commands.Cog, logging.Handler):
             self.task.cancel()
 
 
-def setup(bot):
+# ✅ CHANGED: discord.py v2 async setup
+async def setup(bot):
     logging_cog_channel_id = os.environ.get('LOGGING_COG_CHANNEL_ID')
+
     if logging_cog_channel_id is None:
         logger.info(
-            'Skipping installation of logging cog'
-            'as logging channel is not provided.')
-        return
+            'Skipping installation of logging cog '
+            'as logging channel is not provided.'
+        )
+        return  # ✅ safe: async setup may return None AFTER await
 
     logging_cog = Logging(bot, int(logging_cog_channel_id))
     logging_cog.setLevel(logging.WARNING)
@@ -70,6 +73,11 @@ def setup(bot):
         logging.Formatter(
             fmt='{asctime}:{levelname}:{name}:{message}',
             style='{',
-            datefmt='%d-%m-%Y %H:%M:%S'))
+            datefmt='%d-%m-%Y %H:%M:%S'
+        )
+    )
+
     root_logger.addHandler(logging_cog)
-    bot.add_cog(logging_cog)
+
+    # ✅ CHANGED: must be awaited in v2
+    await bot.add_cog(logging_cog)

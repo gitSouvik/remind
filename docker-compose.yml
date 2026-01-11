@@ -1,0 +1,9 @@
+
+
+services:
+  bot:
+    build: .
+    container_name: remind-bot
+    restart: unless-stopped
+    env_file:
+      - env_file_variables.txt

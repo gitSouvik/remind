@@ -3,7 +3,6 @@ import asyncio
 import discord
 import logging
 from logging.handlers import TimedRotatingFileHandler
-from os import environ
 from remind import constants
 
 from discord.ext import commands
@@ -13,12 +12,11 @@ from remind.util import discord_common
 from remind.util import clist_api
 
 
-def setup():
+def setup_logging():
     # Make required directories.
     for path in constants.ALL_DIRS:
         os.makedirs(path, exist_ok=True)
 
-    # logging to console and file on daily interval
     logging.basicConfig(
         format='{asctime}:{levelname}:{name}:{message}',
         style='{',
@@ -30,10 +28,13 @@ def setup():
                 constants.LOG_FILE_PATH,
                 when='D',
                 backupCount=3,
-                utc=True)])
+                utc=True
+            )
+        ]
+    )
 
 
-def main():
+async def main():
     load_dotenv()
 
     token = os.getenv('BOT_TOKEN_REMIND')
@@ -51,35 +52,47 @@ def main():
     if remind_moderator_role:
         constants.REMIND_MODERATOR_ROLE = remind_moderator_role
 
-    setup()
+    setup_logging()
 
     intents = discord.Intents.default()
     intents.members = True
+    intents.message_content = True
+
     bot = commands.Bot(
         command_prefix=commands.when_mentioned_or('t;'),
-        intents=intents)
+        intents=intents
+    )
 
+    # CHANGED: load extensions asynchronously (discord.py v2)
     cogs = [file.stem for file in Path('remind', 'cogs').glob('*.py')]
-    for extension in cogs:
-        bot.load_extension(f'remind.cogs.{extension}')
-    logging.info(f'Cogs loaded: {", ".join(bot.cogs)}')
 
-    def no_dm_check(ctx):
-        if ctx.guild is None:
-            raise commands.NoPrivateMessage('Private messages not permitted.')
-        return True
+    async with bot:
+        for extension in cogs:
+            await bot.load_extension(f'remind.cogs.{extension}')
 
-    # Restrict bot usage to inside guild channels only.
-    bot.add_check(no_dm_check)
+        logging.info(f'Cogs loaded: {", ".join(bot.cogs)}')
 
-    @discord_common.on_ready_event_once(bot)
-    async def init():
-        clist_api.cache()
-        asyncio.create_task(discord_common.presence(bot))
+        def no_dm_check(ctx):
+            if ctx.guild is None:
+                raise commands.NoPrivateMessage('Private messages not permitted.')
+            return True
 
-    bot.add_listener(discord_common.bot_error_handler, name='on_command_error')
-    bot.run(token)
+        bot.add_check(no_dm_check)
+
+        @discord_common.on_ready_event_once(bot)
+        async def init():
+            clist_api.cache()
+            asyncio.create_task(discord_common.presence(bot))
+
+        bot.add_listener(
+            discord_common.bot_error_handler,
+            name='on_command_error'
+        )
+
+        # CHANGED: use bot.start instead of bot.run
+        await bot.start(token)
 
 
 if __name__ == '__main__':
-    main()
+    # CHANGED: async entrypoint required for discord.py v2
+    asyncio.run(main())

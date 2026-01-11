@@ -37,10 +37,20 @@ _PYTZ_TIMEZONES_GIST_URL = ('https://gist.github.com/heyalexej/'
 class RemindersCogError(commands.CommandError):
     pass
 
+# Old :
+# def _contest_start_time_format(contest, tz):
+#     start = contest.start_time.replace(tzinfo=dt.timezone.utc).astimezone(tz)
+#     return f'{start.strftime("%d %b %y, %H:%M")} {tz}'
+
 
 def _contest_start_time_format(contest, tz):
-    start = contest.start_time.replace(tzinfo=dt.timezone.utc).astimezone(tz)
-    return f'{start.strftime("%d %b %y, %H:%M")} {tz}'
+    start = contest.start_time.replace(
+        tzinfo=dt.timezone.utc
+    ).astimezone(tz)
+
+    return start.strftime(
+        "%A, %d %B %Y at %-I:%M %p IST (Kolkata)"
+    )
 
 
 def _contest_duration_format(contest):
@@ -51,36 +61,67 @@ def _contest_duration_format(contest):
         duration = f'{duration_days}d ' + duration
     return duration
 
+# Old :
+# def _get_formatted_contest_desc(
+#         start,
+#         duration,
+#         url,
+#         max_duration_len):
+#     em = '\N{EN SPACE}'
+#     sq = '\N{WHITE SQUARE WITH UPPER RIGHT QUADRANT}'
+#     desc = (f'`{em}{start}{em}|'
+#             f'{em}{duration.rjust(max_duration_len, em)}{em}|'
+#             f'{em}`[`link {sq}`]({url} "Link to contest page")')
+#     return desc
+
 
 def _get_formatted_contest_desc(
         start,
         duration,
         url,
         max_duration_len):
-    em = '\N{EN SPACE}'
-    sq = '\N{WHITE SQUARE WITH UPPER RIGHT QUADRANT}'
-    desc = (f'`{em}{start}{em}|'
-            f'{em}{duration.rjust(max_duration_len, em)}{em}|'
-            f'{em}`[`link {sq}`]({url} "Link to contest page")')
-    return desc
+    return (
+        f"{start}\n"
+        f"Duration: {duration} | [link]({url})"
+    )
 
+# Old :
+# def _get_embed_fields_from_contests(contests, localtimezone):
+#     infos = [(contest.name,
+#               _contest_start_time_format(contest,
+#                                          localtimezone),
+#               _contest_duration_format(contest),
+#               contest.url) for contest in contests]
+#     max_duration_len = max(len(duration) for _, _, duration, _ in infos)
+
+#     fields = []
+#     for name, start, duration, url in infos:
+#         value = _get_formatted_contest_desc(
+#             start, duration, url, max_duration_len)
+#         fields.append((name, value))
+#     return fields
 
 def _get_embed_fields_from_contests(contests, localtimezone):
-    infos = [(contest.name,
-              _contest_start_time_format(contest,
-                                         localtimezone),
-              _contest_duration_format(contest),
-              contest.url) for contest in contests]
-    max_duration_len = max(len(duration) for _, _, duration, _ in infos)
+    infos = [
+        (
+            contest.name,
+            _contest_start_time_format(contest, localtimezone),
+            _contest_duration_format(contest),
+            contest.url,
+        )
+        for contest in contests
+    ]
 
     fields = []
     for name, start, duration, url in infos:
         value = _get_formatted_contest_desc(
-            start, duration, url, max_duration_len)
+            start, duration, url, None
+        )
         fields.append((name, value))
+
     return fields
 
-
+# New
 async def _send_reminder_at(channel, role, contests, before_secs, send_time,
                             localtimezone: pytz.timezone):
     delay = send_time - dt.datetime.utcnow().timestamp()
@@ -98,10 +139,15 @@ async def _send_reminder_at(channel, role, contests, before_secs, send_time,
                           for label, value in zip(labels, values) if value > 0)
     desc = f'About to start in {before_str}'
     embed = discord_common.color_embed(description=desc)
-    for name, value in _get_embed_fields_from_contests(
-            contests, localtimezone):
+
+    fields = _get_embed_fields_from_contests(contests, localtimezone)
+    contest_name = fields[0][0].split()[0] # first contest name
+    for name, value in fields:
         embed.add_field(name=name, value=value)
-    await channel.send(role.mention, embed=embed)
+    await channel.send(f'{role.mention} Its {contest_name} time!', embed=embed)
+
+
+
 
 _WEBSITE_ALLOWED_PATTERNS = defaultdict(list)
 _WEBSITE_ALLOWED_PATTERNS['codeforces.com'] = ['']
@@ -152,7 +198,7 @@ def get_default_guild_settings():
     return settings
 
 
-class Reminders(commands.Cog):
+class Reminders(commands.Cog, name="Reminders"):
     def __init__(self, bot):
         self.bot = bot
         self.future_contests = None
@@ -583,5 +629,5 @@ class Reminders(commands.Cog):
         pass
 
 
-def setup(bot):
-    bot.add_cog(Reminders(bot))
+async def setup(bot):
+    await bot.add_cog(Reminders(bot))
